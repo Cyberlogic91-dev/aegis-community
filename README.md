@@ -42,6 +42,21 @@ label `verified` sur un signalement vérifié. L'agrégation est automatique
 Aucune donnée personnelle n'est acceptée : tout signalement contenant un numéro en clair ou
 des informations nominatives sera rejeté.
 
+### Révocation (faux positif)
+
+Si un numéro légitime a été ajouté par erreur, un mainteneur pose le label **`false-positive`**
+sur une issue contenant l'empreinte concernée. À la prochaine agrégation, l'entrée est marquée
+`"deleted": true` : les applications la **retirent** automatiquement de leur base locale.
+
+### Modération — file d'attente
+
+L'agrégateur publie aussi [`pending.json`](pending.json) : la liste des empreintes ayant reçu
+**1 ou 2 signalements** (sous le seuil), avec le nombre de signaleurs manquants. Pratique pour
+suivre ce qui « monte » et décider d'une validation anticipée (`verified`).
+
+Le fichier `community_blacklist.json` est **trié par empreinte** et n'est ré-écrit que lorsque
+son contenu change réellement (pas de commit inutile à chaque exécution planifiée).
+
 ## Licence
 
 Données sous licence libre (domaine public / CC0 pour les empreintes agrégées). Le code
