@@ -1,0 +1,99 @@
+name: Agréger les signalements
+
+# Reconstruit community_blacklist.json à partir des Issues de signalement.
+# Règle anti-abus : une empreinte n'est publiée qu'après >= 3 signalements de comptes
+# DISTINCTS, ou si un signalement porte le label "verified" (validation mainteneur).
+
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled, reopened, closed]
+  schedule:
+    - cron: "17 * * * *"   # filet de sécurité horaire
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: read
+
+concurrency:
+  group: aggregate
+  cancel-in-progress: false
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruire la base
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const THRESHOLD = 3;
+            const CATS = ["TELEMARKETING","SCAM","ROBOCALL","SPOOFING","OTHER","LEGITIMATE","UNDETERMINED"];
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo,
+              labels: 'report', state: 'all', per_page: 100,
+            });
+
+            const byHash = {};
+            for (const it of issues) {
+              if (it.pull_request) continue;
+              const body = it.body || '';
+              const hm = body.match(/\b[a-f0-9]{64}\b/i);
+              if (!hm) continue;
+              const hash = hm[0].toLowerCase();
+              const cat = CATS.find(c => new RegExp('\\b' + c + '\\b').test(body)) || 'OTHER';
+              const verified = (it.labels || []).some(l => (l.name || l) === 'verified');
+              // Libellé optionnel : texte sous la section "Libellé".
+              let label = null;
+              const lm = body.match(/Libell[ée][^\n]*\n+([^\n#_][^\n]*)/i);
+              if (lm) { const t = lm[1].trim(); if (t && !/^_no response_$/i.test(t)) label = t.slice(0, 80); }
+
+              const e = byHash[hash] || (byHash[hash] = { reporters: new Set(), cats: {}, label: null, verified: false });
+              e.reporters.add((it.user && it.user.login) || ('anon' + it.number));
+              e.cats[cat] = (e.cats[cat] || 0) + 1;
+              if (verified) e.verified = true;
+              if (!e.label && label) e.label = label;
+            }
+
+            let data = { synced_at: 0, entries: [] };
+            try { data = JSON.parse(fs.readFileSync('community_blacklist.json', 'utf8')); } catch (e) {}
+            const map = new Map((data.entries || []).map(e => [e.phone_hash, e]));
+
+            let added = 0, updated = 0;
+            for (const [hash, info] of Object.entries(byHash)) {
+              const count = info.reporters.size;
+              if (count < THRESHOLD && !info.verified) continue;
+              const cat = Object.entries(info.cats).sort((a, b) => b[1] - a[1])[0][0];
+              const prev = map.get(hash);
+              const rc = Math.max(count, (prev && prev.report_count) || 0);
+              const entry = {
+                phone_hash: hash,
+                category: cat,
+                report_count: rc,
+                label: (prev && prev.label) || info.label || null,
+                deleted: false,
+              };
+              if (!prev) added++; else updated++;
+              map.set(hash, entry);
+            }
+
+            data.entries = [...map.values()];
+            data.synced_at = Date.now();
+            fs.writeFileSync('community_blacklist.json', JSON.stringify(data));
+            core.notice(`Signalements traités : +${added} ajout(s), ${updated} mise(s) à jour, total ${data.entries.length}.`);
+
+      - name: Commit si modifié
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add community_blacklist.json
+          if git diff --staged --quiet; then
+            echo "Aucun changement."
+          else
+            git commit -m "community: agrégation automatique des signalements"
+            git push
+          fi

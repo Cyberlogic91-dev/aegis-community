@@ -1,0 +1,47 @@
+name: Signaler un numéro indésirable
+description: Signaler une empreinte (SHA-256) de numéro de démarchage / arnaque. Aucun numéro en clair.
+title: "[report] nouveau signalement"
+labels: ["report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de contribuer à la base communautaire Aegis 🙏
+
+        ⚠️ **Ne collez jamais de numéro de téléphone en clair** ni de donnée personnelle.
+        Collez uniquement l'**empreinte SHA-256** que l'application affiche pour le numéro.
+  - type: input
+    id: hash
+    attributes:
+      label: Empreinte SHA-256
+      description: 64 caractères hexadécimaux, fournis par l'app Aegis (Signaler → copier l'empreinte).
+      placeholder: "ex. 3a7f1c…(64 caractères)"
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Catégorie
+      options:
+        - TELEMARKETING
+        - SCAM
+        - ROBOCALL
+        - SPOOFING
+        - OTHER
+    validations:
+      required: true
+  - type: input
+    id: label
+    attributes:
+      label: Libellé (optionnel)
+      description: Nature de l'appel, sans donnée personnelle. Ex. « démarchage assurance », « faux conseiller bancaire ».
+      placeholder: "démarchage assurance"
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: Je confirme ne fournir aucun numéro en clair ni donnée personnelle.
+          required: true
