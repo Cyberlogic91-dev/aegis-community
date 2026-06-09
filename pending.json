@@ -1,5 +1,11 @@
 {
-  "updated_at": 1780994904067,
+  "updated_at": 1781002605557,
   "threshold": 3,
-  "pending": []
+  "pending": [
+    {
+      "phone_hash": "465a2f634e1cba2ba309cb9ce19a77329ecba772b636a872fcba58d50260368c",
+      "reporters": 1,
+      "needed": 2
+    }
+  ]
 }
