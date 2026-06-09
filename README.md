@@ -1,5 +1,8 @@
 # Aegis — base communautaire
 
+[![Numéros référencés](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Cyberlogic91-dev/aegis-community/main/badge.json)](community_blacklist.json)
+[![En attente de validation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Cyberlogic91-dev/aegis-community/main/badge-pending.json)](pending.json)
+
 Base **anti-démarchage / anti-arnaque** de l'application [Aegis](https://cyberlogic91-dev.github.io/aegis-app/).
 
 Elle ne contient **aucun numéro de téléphone en clair** : uniquement des **empreintes SHA-256**

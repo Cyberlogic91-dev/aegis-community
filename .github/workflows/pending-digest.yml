@@ -1,0 +1,73 @@
+name: Digest des signalements en attente
+
+# Maintient UNE issue de suivi (idempotente) listant les signalements sous le seuil,
+# avec liens et nombre de signaleurs manquants. Pratique pour la modération.
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"   # chaque lundi 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: pending-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const THRESHOLD = 3;
+            const TITLE = "📋 Signalements en attente de validation";
+            const HASH_RE = /\b[a-f0-9]{64}\b/i;
+            const { owner, repo } = context.repo;
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, labels: 'report', state: 'open', per_page: 100,
+            });
+
+            const byHash = {};
+            for (const it of issues) {
+              if (it.pull_request) continue;
+              const m = (it.body || '').match(HASH_RE); if (!m) continue;
+              const h = m[0].toLowerCase();
+              const e = byHash[h] || (byHash[h] = { reporters: new Set(), nums: [] });
+              e.reporters.add((it.user && it.user.login) || ('anon' + it.number));
+              e.nums.push(it.number);
+            }
+
+            const rows = Object.entries(byHash)
+              .map(([h, e]) => ({ h, n: e.reporters.size, nums: e.nums }))
+              .filter(r => r.n < THRESHOLD)
+              .sort((a, b) => b.n - a.n);
+
+            let body = `_Mis à jour automatiquement._ Seuil d'ajout : **${THRESHOLD}** signaleurs distincts.\n\n`;
+            if (rows.length === 0) {
+              body += "✅ Aucun signalement en attente.";
+            } else {
+              body += "| Empreinte | Signaleurs | Manque | Issues |\n|---|---|---|---|\n";
+              for (const r of rows) {
+                const links = r.nums.map(n => `#${n}`).join(', ');
+                body += `| \`${r.h.slice(0, 12)}…\` | ${r.n} | ${THRESHOLD - r.n} | ${links} |\n`;
+              }
+              body += `\n💡 Poser le label \`verified\` sur une issue force l'ajout immédiat.`;
+            }
+
+            // Upsert : trouver l'issue de suivi existante (label tracking), sinon la créer.
+            const tracking = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, labels: 'tracking', state: 'open', per_page: 50,
+            });
+            const existing = tracking.find(i => i.title === TITLE);
+            if (existing) {
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
+              core.notice(`Digest mis à jour (issue #${existing.number}) — ${rows.length} en attente.`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title: TITLE, body, labels: ['tracking'] });
+              core.notice(`Digest créé (issue #${created.data.number}) — ${rows.length} en attente.`);
+            }

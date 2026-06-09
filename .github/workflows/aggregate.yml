@@ -114,16 +114,27 @@ jobs:
               core.notice('Base inchangée — aucun commit.');
             }
 
-            // pending.json (visibilité modération) — écrit seulement si changé
-            pending.sort((a, b) => b.reporters - a.reporters);
-            const pendingOut = JSON.stringify({ updated_at: Date.now(), threshold: THRESHOLD, pending }, null, 2);
-            let prevPending = '';
-            try { prevPending = fs.readFileSync('pending.json', 'utf8'); } catch (e) {}
             const norm = s => s.replace(/"updated_at":\s*\d+,?/, '');
-            if (norm(prevPending) !== norm(pendingOut)) {
-              fs.writeFileSync('pending.json', pendingOut);
+            const writeIfChanged = (path, content) => {
+              let prev = ''; try { prev = fs.readFileSync(path, 'utf8'); } catch (e) {}
+              if (norm(prev) !== norm(content)) { fs.writeFileSync(path, content); return true; }
+              return false;
+            };
+
+            // pending.json (visibilité modération)
+            pending.sort((a, b) => b.reporters - a.reporters);
+            if (writeIfChanged('pending.json', JSON.stringify({ updated_at: Date.now(), threshold: THRESHOLD, pending }, null, 2)))
               core.notice(`pending.json : ${pending.length} empreinte(s) en attente.`);
-            }
+
+            // Badges shields.io (endpoint) — mis à jour automatiquement.
+            const active = entries.filter(e => !e.deleted).length;
+            writeIfChanged('badge.json', JSON.stringify({
+              schemaVersion: 1, label: "numéros référencés", message: String(active), color: "blue"
+            }, null, 2));
+            writeIfChanged('badge-pending.json', JSON.stringify({
+              schemaVersion: 1, label: "en attente", message: String(pending.length),
+              color: pending.length ? "orange" : "lightgrey"
+            }, null, 2));
 
       - name: Commit si modifié
         run: |
